@@ -96,13 +96,36 @@ local function get_distributors(size)
 	return result
 end
 
+local function make_gates(size)
+	local radius = size * 6 + 3.5
+	return {
+		{ x = -1.5, y = radius, dir = defines.direction.east },
+		{ x = -0.5, y = radius, dir = defines.direction.east },
+		{ x = 0.5, y = radius, dir = defines.direction.east },
+		{ x = 1.5, y = radius, dir = defines.direction.east },
+		{ x = -1.5, y = -radius, dir = defines.direction.west },
+		{ x = -0.5, y = -radius, dir = defines.direction.west },
+		{ x = 0.5, y = -radius, dir = defines.direction.west },
+		{ x = 1.5, y = -radius, dir = defines.direction.west },
+		{ x = -radius, y = -1.5, dir = defines.direction.south },
+		{ x = -radius, y = -0.5, dir = defines.direction.south },
+		{ x = -radius, y = 0.5, dir = defines.direction.south },
+		{ x = -radius, y = 1.5, dir = defines.direction.south },
+		{ x = radius, y = -1.5, dir = defines.direction.north },
+		{ x = radius, y = -0.5, dir = defines.direction.north },
+		{ x = radius, y = 0.5, dir = defines.direction.north },
+		{ x = radius, y = 1.5, dir = defines.direction.north }
+	}
+end
+
 local function make_constructor(size)
 	local radius = size * 6
 	local constructor = {
 		rectangles = {},
 		provider_x = -9,
 		provider_y = radius + 2,
-		distributors = get_distributors(size)
+		distributors = get_distributors(size),
+		gates = make_gates(size)
 	}
 	table.insert(constructor.rectangles, floor_size_border(radius))
 	table.insert(constructor.rectangles, entrance_border_at(defines.direction.north, radius))
@@ -135,101 +158,70 @@ end
 
 -- Constructor table
 local constructors = {
-	small = make_constructor(SIZE_SMALL), -- size of 3n corresponds to a factory with 6nX6n external footprint, 12n connection points and 36nX36n internal construction area
+	small = make_constructor(SIZE_SMALL), -- size of 3n corresponds to a factory with 6nX6n external footprint, 16n connection points and 36nX36n internal construction area
 	medium = make_constructor(SIZE_MEDIUM),
 	large = make_constructor(SIZE_LARGE),
 	huge = make_constructor(SIZE_HUGE)
 }
 
--- Exit functions
-local function make_gates(direction, size)
-	local result
-	local radius = size * 6 + 3.5
-	if direction == defines.direction.north then
-		result = {
-			{ x = -1.5, y = radius },
-			{ x = -0.5, y = radius },
-			{ x = 0.5, y = radius},
-			{ x = 1.5, y = radius }
-		}
-	elseif direction == defines.direction.south then
-		result = {
-			{ x = -1.5, y = -radius },
-			{ x = -0.5, y = -radius },
-			{ x = 0.5, y = -radius},
-			{ x = 1.5, y = -radius }
-		}
-	elseif direction == defines.direction.east then
-		result = {
-			{ x = -radius, y = -1.5 },
-			{ x = -radius, y = -0.5 },
-			{ x = -radius, y = 0.5 },
-			{ x = -radius, y = 1.5 }
-		}
-	elseif direction == defines.direction.west then
-		result = {
-			{ x = radius, y = -1.5 },
-			{ x = radius, y = -0.5 },
-			{ x = radius, y = 0.5 },
-			{ x = radius, y = 1.5 }
-		}
-	end
-	return result
-end
-
 -- Connection functions
 
-local function make_connection(direction, index, size, void)
+local function make_connection(direction, index, size)
 	local result
 	local radius = size * 6
+	local offset
+	if index > math.floor(size * 2 / 3) then
+		offset = 0.5
+	else
+		offset = -1.5
+	end
 	if direction == defines.direction.north then
 		result = {
-			outside_x = index - math.floor(size * 2 / 3) - 0.5,
+			outside_x = index - math.floor(size * 2 / 3) + offset,
 			outside_y = -0.5 - size,
 			inside_x = index * 9 - radius - 4.5,
-			inside_y = -0.5 - radius
+			inside_y = -0.5 - radius,
+			direction_in = (direction + 4) % 8,
+			direction_out = direction
 		}
 	elseif direction == defines.direction.south then
 		result = {
-			outside_x = index - math.floor(size * 2 / 3) - 0.5,
+			outside_x = index - math.floor(size * 2 / 3) + offset,
 			outside_y = 0.5 + size,
 			inside_x = index * 9 - radius - 4.5,
-			inside_y = 0.5 + radius
+			inside_y = 0.5 + radius,
+			direction_in = (direction + 4) % 8,
+			direction_out = direction
 		}
 	elseif direction == defines.direction.east then
 		result = {
 			outside_x = 0.5 + size,
-			outside_y = index - math.floor(size * 2 / 3) - 0.5,
+			outside_y = index - math.floor(size * 2 / 3) + offset,
 			inside_x = 0.5 + radius,
-			inside_y = index * 9 - radius - 4.5
+			inside_y = index * 9 - radius - 4.5,
+			direction_in = (direction + 4) % 8,
+			direction_out = direction
 		}
 	elseif direction == defines.direction.west then
 		result = {
 			outside_x = -0.5 - size,
-			outside_y = index - math.floor(size * 2 / 3) - 0.5,
+			outside_y = index - math.floor(size * 2 / 3) + offset,
 			inside_x = -0.5 - radius,
-			inside_y = index * 9 - radius - 4.5
+			inside_y = index * 9 - radius - 4.5,
+			direction_in = (direction + 4) % 8,
+			direction_out = direction
 		}
-	end
-	if result then -- should always exist, but just to be safe
-		if void then
-			result.direction_in = -1 -- should never match direction
-			result.direction_out = -1 -- should never match direction
-		else
-			result.direction_in = (direction + 4) % 8
-			result.direction_out = direction
-		end
 	end
 	return result
 end
 
-local function make_connections(size, void)
+local function make_connections(size)
 	local result = {}
 	for i = 1, math.floor(size * 4 / 3) do
-		result["t" .. i] = make_connection(defines.direction.north, i, size, void)
-		result["r" .. i] = make_connection(defines.direction.east, i, size, void)
-		result["b" .. i] = make_connection(defines.direction.south, i, size, void)
-		result["l" .. i] = make_connection(defines.direction.west, i, size, void)
+		table.insert(result, make_connection(defines.direction.north, i, size))
+		table.insert(result, make_connection(defines.direction.east, i, size))
+		table.insert(result, make_connection(defines.direction.south, i, size))
+		table.insert(result, make_connection(defines.direction.west, i, size))
 	end
 	return result
 end
@@ -237,280 +229,231 @@ end
 -- Connection table
 local connections = {
 	small = make_connections(SIZE_SMALL),
-	small_void = make_connections(SIZE_SMALL, true),
 	medium = make_connections(SIZE_MEDIUM),
-	medium_void = make_connections(SIZE_MEDIUM, true),
 	large = make_connections(SIZE_LARGE),
-	large_void = make_connections(SIZE_LARGE, true),
-	huge = make_connections(SIZE_HUGE),
-	huge_void = make_connections(SIZE_HUGE, true)
+	huge = make_connections(SIZE_HUGE)
 }
 
--- Directional connections
-local function get_possible_connections(direction, size)
-	local result = {}
-	for i = 1, math.floor(size * 4 / 3) do
-		if direction == defines.direction.north then
-			table.insert(result, connections[index_size(size) .. "_void"]["b" .. i])
-		else
-			table.insert(result, connections[index_size(size)]["b" .. i])
-		end
-		if direction == defines.direction.south then
-			table.insert(result, connections[index_size(size) .. "_void"]["t" .. i])
-		else
-			table.insert(result, connections[index_size(size)]["t" .. i])
-		end
-		if direction == defines.direction.east then
-			table.insert(result, connections[index_size(size) .. "_void"]["l" .. i])
-		else
-			table.insert(result, connections[index_size(size)]["l" .. i])
-		end
-		if direction == defines.direction.west then
-			table.insert(result, connections[index_size(size) .. "_void"]["r" .. i])
-		else
-			table.insert(result, connections[index_size(size)]["r" .. i])
-		end
-	end
-	return result
-end
-
--- Directional information table
-local directionals = {
+-- Door information table
+local doors = {
 	small_north = {
 		direction = "north",
 		entrance_x = 0,
-		entrance_y = 20,
+		entrance_y = -20,
 		exit_x = 0,
-		exit_y = 3,
-		possible_connections = get_possible_connections(defines.direction.north, SIZE_SMALL),
-		gates = make_gates(defines.direction.north, SIZE_SMALL)
+		exit_y = -3
 	},
 	small_south = {
 		direction = "south",
 		entrance_x = 0,
-		entrance_y = -20,
+		entrance_y = 20,
 		exit_x = 0,
-		exit_y = -3,
-		possible_connections = get_possible_connections(defines.direction.south, SIZE_SMALL),
-		gates = make_gates(defines.direction.south, SIZE_SMALL)
+		exit_y = 3
 	},
 	small_east = {
 		direction = "east",
-		entrance_x = -20,
-		entrance_y = 0,
-		exit_x = -3,
-		exit_y = 0,
-		possible_connections = get_possible_connections(defines.direction.east, SIZE_SMALL),
-		gates = make_gates(defines.direction.east, SIZE_SMALL)
-	},
-	small_west = {
-		direction = "west",
 		entrance_x = 20,
 		entrance_y = 0,
 		exit_x = 3,
-		exit_y = 0,
-		possible_connections = get_possible_connections(defines.direction.west, SIZE_SMALL),
-		gates = make_gates(defines.direction.west, SIZE_SMALL)
+		exit_y = 0
+	},
+	small_west = {
+		direction = "west",
+		entrance_x = -20,
+		entrance_y = 0,
+		exit_x = -3,
+		exit_y = 0
 	},
 	medium_north = {
 		direction = "north",
 		entrance_x = 0,
-		entrance_y = 38,
+		entrance_y = -38,
 		exit_x = 0,
-		exit_y = 6,
-		possible_connections = get_possible_connections(defines.direction.north, SIZE_MEDIUM),
-		gates = make_gates(defines.direction.north, SIZE_MEDIUM)
+		exit_y = -6
 	},
 	medium_south = {
 		direction = "south",
 		entrance_x = 0,
-		entrance_y = -38,
+		entrance_y = 38,
 		exit_x = 0,
-		exit_y = -6,
-		possible_connections = get_possible_connections(defines.direction.south, SIZE_MEDIUM),
-		gates = make_gates(defines.direction.south, SIZE_MEDIUM)
+		exit_y = 6
 	},
 	medium_east = {
 		direction = "east",
-		entrance_x = -38,
-		entrance_y = 0,
-		exit_x = -6,
-		exit_y = 0,
-		possible_connections = get_possible_connections(defines.direction.east, SIZE_MEDIUM),
-		gates = make_gates(defines.direction.east, SIZE_MEDIUM)
-	},
-	medium_west = {
-		direction = "west",
 		entrance_x = 38,
 		entrance_y = 0,
 		exit_x = 6,
-		exit_y = 0,
-		possible_connections = get_possible_connections(defines.direction.west, SIZE_MEDIUM),
-		gates = make_gates(defines.direction.west, SIZE_MEDIUM)
+		exit_y = 0
+	},
+	medium_west = {
+		direction = "west",
+		entrance_x = -38,
+		entrance_y = 0,
+		exit_x = -6,
+		exit_y = 0
 	},
 	large_north = {
 		direction = "north",
 		entrance_x = 0,
-		entrance_y = 56,
+		entrance_y = -56,
 		exit_x = 0,
-		exit_y = 9,
-		possible_connections = get_possible_connections(defines.direction.north, SIZE_LARGE),
-		gates = make_gates(defines.direction.north, SIZE_LARGE)
+		exit_y = -9
 	},
 	large_south = {
 		direction = "south",
 		entrance_x = 0,
-		entrance_y = -56,
+		entrance_y = 56,
 		exit_x = 0,
-		exit_y = -9,
-		possible_connections = get_possible_connections(defines.direction.south, SIZE_LARGE),
-		gates = make_gates(defines.direction.south, SIZE_LARGE)
+		exit_y = 9
 	},
 	large_east = {
 		direction = "east",
-		entrance_x = -56,
-		entrance_y = 0,
-		exit_x = -9,
-		exit_y = 0,
-		possible_connections = get_possible_connections(defines.direction.east, SIZE_LARGE),
-		gates = make_gates(defines.direction.east, SIZE_LARGE)
-	},
-	large_west = {
-		direction = "west",
 		entrance_x = 56,
 		entrance_y = 0,
 		exit_x = 9,
-		exit_y = 0,
-		possible_connections = get_possible_connections(defines.direction.west, SIZE_LARGE),
-		gates = make_gates(defines.direction.west, SIZE_LARGE)
+		exit_y = 0
+	},
+	large_west = {
+		direction = "west",
+		entrance_x = -56,
+		entrance_y = 0,
+		exit_x = -9,
+		exit_y = 0
 	},
 	huge_north = {
 		direction = "north",
 		entrance_x = 0,
-		entrance_y = 72,
+		entrance_y = -74,
 		exit_x = 0,
-		exit_y = 12,
-		possible_connections = get_possible_connections(defines.direction.north, SIZE_HUGE),
-		gates = make_gates(defines.direction.north, SIZE_HUGE)
+		exit_y = -12
 	},
 	huge_south = {
 		direction = "south",
 		entrance_x = 0,
-		entrance_y = -72,
+		entrance_y = 74,
 		exit_x = 0,
-		exit_y = -12,
-		possible_connections = get_possible_connections(defines.direction.south, SIZE_HUGE),
-		gates = make_gates(defines.direction.south, SIZE_HUGE)
+		exit_y = 12
 	},
 	huge_east = {
 		direction = "east",
-		entrance_x = -72,
+		entrance_x = 74,
 		entrance_y = 0,
-		exit_x = -12,
-		exit_y = 0,
-		possible_connections = get_possible_connections(defines.direction.east, SIZE_HUGE),
-		gates = make_gates(defines.direction.east, SIZE_HUGE)
+		exit_x = 12,
+		exit_y = 0
 	},
 	huge_west = {
 		direction = "west",
-		entrance_x = 72,
+		entrance_x = -74,
 		entrance_y = 0,
-		exit_x = 12,
-		exit_y = 0,
-		possible_connections = get_possible_connections(defines.direction.west, SIZE_HUGE),
-		gates = make_gates(defines.direction.west, SIZE_HUGE)
+		exit_x = -12,
+		exit_y = 0
 	}
-	
 }
 
 local LAYOUT = {
 	["small-factory"] = {
 		name = "small-factory",
-		constructor = constructors["small"],
+		constructor = constructors.small,
 		tier = 0,
 		chunk_radius = 1,
 		is_power_plant = false,
-		north = directionals["small_north"],
-		south = directionals["small_south"],
-		east = directionals["small_east"],
-		west = directionals["small_west"]
+		provider = "factory-power-provider",
+		possible_connections = connections.small,
+		north = doors.small_north,
+		south = doors.small_south,
+		east = doors.small_east,
+		west = doors.small_west
 	},
 	["small-power-plant"] = {
 		name = "small-power-plant",
-		constructor = constructors["small"],
+		constructor = constructors.small,
 		tier = 0,
 		chunk_radius = 1,
 		is_power_plant = true,
-		north = directionals["small_north"],
-		south = directionals["small_south"],
-		east = directionals["small_east"],
-		west = directionals["small_west"]
+		provider = "factory-power-receiver",
+		possible_connections = connections.small,
+		north = doors.small_north,
+		south = doors.small_south,
+		east = doors.small_east,
+		west = doors.small_west
 	},
 	["medium-factory"] = {
 		name = "medium-factory",
-		constructor = constructors["medium"],
+		constructor = constructors.medium,
 		tier = 1,
-		chunk_radius = 1,
+		chunk_radius = 2,
 		is_power_plant = false,
-		north = directionals["medium_north"],
-		south = directionals["medium_south"],
-		east = directionals["medium_east"],
-		west = directionals["medium_west"]
+		provider = "factory-power-provider-mk2",
+		possible_connections = connections.medium,
+		north = doors.medium_north,
+		south = doors.medium_south,
+		east = doors.medium_east,
+		west = doors.medium_west
 	},
 	["medium-power-plant"] = {
 		name = "medium-power-plant",
-		constructor = constructors["medium"],
+		constructor = constructors.medium,
 		tier = 1,
-		chunk_radius = 1,
+		chunk_radius = 2,
 		is_power_plant = true,
-		north = directionals["medium_north"],
-		south = directionals["medium_south"],
-		east = directionals["medium_east"],
-		west = directionals["medium_west"]
+		provider = "factory-power-receiver-mk2",
+		possible_connections = connections.medium,
+		north = doors.medium_north,
+		south = doors.medium_south,
+		east = doors.medium_east,
+		west = doors.medium_west
 	},
 	["large-factory"] = {
 		name = "large-factory",
-		constructor = constructors["large"],
+		constructor = constructors.large,
 		tier = 2,
-		chunk_radius = 1,
+		chunk_radius = 2,
 		is_power_plant = false,
-		north = directionals["large_north"],
-		south = directionals["large_south"],
-		east = directionals["large_east"],
-		west = directionals["large_west"]
+		provider = "factory-power-provider-mk3",
+		possible_connections = connections.large,
+		north = doors.large_north,
+		south = doors.large_south,
+		east = doors.large_east,
+		west = doors.large_west
 	},
 	["large-power-plant"] = {
 		name = "large-power-plant",
-		constructor = constructors["large"],
+		constructor = constructors.large,
 		tier = 2,
-		chunk_radius = 1,
+		chunk_radius = 2,
 		is_power_plant = true,
-		north = directionals["large_north"],
-		south = directionals["large_south"],
-		east = directionals["large_east"],
-		west = directionals["large_west"]
+		provider = "factory-power-receiver-mk3",
+		possible_connections = connections.large,
+		north = doors.large_north,
+		south = doors.large_south,
+		east = doors.large_east,
+		west = doors.large_west
 	},
 	["huge-factory"] = {
 		name = "huge-factory",
-		constructor = constructors["huge"],
+		constructor = constructors.huge,
 		tier = 3,
-		chunk_radius = 1,
+		chunk_radius = 3,
 		is_power_plant = false,
-		north = directionals["huge_north"],
-		south = directionals["huge_south"],
-		east = directionals["huge_east"],
-		west = directionals["huge_west"]
+		provider = "factory-power-provider-mk4",
+		possible_connections = connections.huge,
+		north = doors.huge_north,
+		south = doors.huge_south,
+		east = doors.huge_east,
+		west = doors.huge_west
 	},
 	["huge-power-plant"] = {
 		name = "huge-power-plant",
-		constructor = constructors["huge"],
+		constructor = constructors.huge,
 		tier = 3,
-		chunk_radius = 1,
+		chunk_radius = 3,
 		is_power_plant = true,
-		north = directionals["huge_north"],
-		south = directionals["huge_south"],
-		east = directionals["huge_east"],
-		west = directionals["huge_west"]
+		provider = "factory-power-receiver-mk4",
+		possible_connections = connections.huge,
+		north = doors.huge_north,
+		south = doors.huge_south,
+		east = doors.huge_east,
+		west = doors.huge_west
 	}
 }
 

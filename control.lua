@@ -11,7 +11,6 @@ function glob_init()
 	global["factory-surface"] = global["factory-surface"] or {}
 	global["surface-structure"] = global["surface-structure"] or {}
 	global["surface-layout"] = global["surface-layout"] or {}
-	global["surface-direction"] = global["surface-direction"] or {}
 	global["surface-exit"] = global["surface-exit"] or {}
 	global["health-data"] = global["health-data"] or {}
 	init_connection_structure()
@@ -34,17 +33,6 @@ local DEBUG = false
 local LAYOUT = require("layouts")
 
 -- FACTORY WORLD ASSIGNMENT --
-local function index_direction(direction)
-	if direction == defines.direction.north then
-		return "north"
-	elseif direction == defines.direction.south then
-		return "south"
-	elseif direction == defines.direction.east then
-		return "east"
-	elseif direction == defines.direction.west then
-		return "west"
-	end
-end
 
 function create_surface(factory, layout)
 	local surface_name = "Inside factory " .. factory.unit_number
@@ -53,9 +41,12 @@ function create_surface(factory, layout)
 	global["factory-surface"][factory.unit_number] = surface -- surface_name
 	global["surface-structure"][surface_name] = {parent = factory, ticks = 0, connections = {}, chunks_generated = 0, chunks_required = 4*layout.chunk_radius*layout.chunk_radius, finished = false}
 	global["surface-layout"][surface_name] = layout.name
-	local dir = index_direction(factory.direction)
-	global["surface-direction"][surface_name] = dir
-	global["surface-exit"][surface_name] = {x = factory.position.x+layout[dir].exit_x, y = factory.position.y+layout[dir].exit_y, surface = factory.surface}
+	global["surface-exit"][surface_name] = {
+		north = {x = factory.position.x + layout.north.exit_x, y = factory.position.y + layout.north.exit_y, surface = factory.surface},
+		south = {x = factory.position.x + layout.south.exit_x, y = factory.position.y + layout.south.exit_y, surface = factory.surface},
+		east = {x = factory.position.x + layout.east.exit_x, y = factory.position.y + layout.east.exit_y, surface = factory.surface},
+		west = {x = factory.position.x + layout.west.exit_x, y = factory.position.y + layout.west.exit_y, surface = factory.surface}
+	}
 	reset_daytime(surface)
 end
 
@@ -63,18 +54,12 @@ function connect_factory_to_existing_surface(factory, surface)
 	global["factory-surface"][factory.unit_number] = surface
 	global["surface-structure"][surface.name].parent = factory
 	local layout = get_layout(surface)
-	local dir = index_direction(factory.direction)
-	if dir ~= global["surface-direction"][surface.name] then -- the factory has been placed in a different orientation than previously, adjust accordingly
-		global["surface-direction"][surface.name] = dir
-		global["surface-exit"][surface.name] = {x = factory.position.x+layout[dir].exit_x, y = factory.position.y+layout[dir].exit_y, surface = factory.surface}
-		local old_gates = surface.find_entities_filtered({ name = "factory-gate" })
-		for _, gate in pairs(old_gates) do
-			gate.destroy()
-		end
-		for _, coords in pairs(layout[dir].gates) do
-			place_entity(surface, "factory-gate", coords.x, coords.y, factory.force, (factory.direction + 2) % 8)
-		end
-	end
+	global["surface-exit"][surface.name] = {
+		north = {x = factory.position.x + layout.north.exit_x, y = factory.position.y + layout.north.exit_y, surface = factory.surface},
+		south = {x = factory.position.x + layout.south.exit_x, y = factory.position.y + layout.south.exit_y, surface = factory.surface},
+		east = {x = factory.position.x + layout.east.exit_x, y = factory.position.y + layout.east.exit_y, surface = factory.surface},
+		west = {x = factory.position.x + layout.west.exit_x, y = factory.position.y + layout.west.exit_y, surface = factory.surface}
+	}
 end
 
 function has_surface(factory)
@@ -117,16 +102,8 @@ function get_layout_by_name(surface_name)
 	end
 end
 
-function get_direction(surface)
-	return global["surface-direction"][surface.name]
-end
-
-function get_direction_by_name(surface_name)
-	return global["surface-direction"][surface_name]
-end
-
-function get_exit(surface)
-	return global["surface-exit"][surface.name]
+function get_exit(surface, direction)
+	return global["surface-exit"][surface.name][direction]
 end
 
 function save_health_data(factory)
@@ -234,17 +211,12 @@ function build_factory_interior(surface, layout, structure)
 		add_tile_rect(tiles, rect.tile, rect.x1, rect.y1, rect.x2, rect.y2)
 	end
 	surface.set_tiles(tiles)
-	if layout.is_power_plant then
-		place_entity_generated(surface, "factory-power-receiver", layout.constructor.provider_x, layout.constructor.provider_y, "power_provider")
-	else
-		place_entity_generated(surface, "factory-power-provider", layout.constructor.provider_x, layout.constructor.provider_y, "power_provider")
-	end
+	place_entity_generated(surface, layout.provider, layout.constructor.provider_x, layout.constructor.provider_y, "power_provider")
 	for _, coords in pairs(layout.constructor.distributors) do
 		place_entity_generated(surface, "factory-power-distributor", coords.x, coords.y)
 	end
-	local dir = get_direction(surface)
-	for _, coords in pairs(layout[dir].gates) do
-		place_entity(surface, "factory-gate", coords.x, coords.y, structure.parent.force, (defines.direction[dir] + 2) % 8)
+	for _, coords in pairs(layout.constructor.gates) do
+		place_entity(surface, "factory-gate", coords.x, coords.y, structure.parent.force, coords.dir)
 	end
 	structure.finished = true
 end
@@ -260,7 +232,6 @@ end)
 -- PLACING, PICKING UP FACTORIES
 
 function on_built_factory(factory)
-	factory.rotatable = false
 	factory.operable = false
 	health_data = get_and_delete_health_data(factory.health)
 	if health_data then
@@ -351,7 +322,7 @@ function mark_connections_dirty(factory)
 end
 
 local function check_connections(factory, surface, structure, layout, parent_surface)
-	for id, pconn in pairs(layout[global["surface-direction"][surface.name]].possible_connections) do
+	for id, pconn in pairs(layout.possible_connections) do
 		data = structure.connections[id]
 		
 		if data then
@@ -404,7 +375,7 @@ script.on_event(defines.events.on_tick, function(event)
 			
 			-- TRANSFER POLLUTION
 			if structure.ticks % 60 < 1 then
-				local exit_pos = get_exit(surface) 
+				local exit_pos = get_exit(surface, "south") 
 				for y = -1,1,2 do
 					for x = -1,1,2 do
 						local pollution = surface.get_pollution({x, y})
@@ -451,47 +422,70 @@ end
 
 -- ENTERING/LEAVING FACTORIES
 
-function at_factory_entrance(player, factory)
+function get_entrance_beneath(player, factory)
 	local result = false
-	if factory.direction == defines.direction.north then
-		result = factory.position.y < player.position.y and math.abs(factory.position.x-player.position.x) < 0.6
-	elseif factory.direction == defines.direction.south then
-		result = factory.position.y > player.position.y and math.abs(factory.position.x-player.position.x) < 0.6
-	elseif factory.direction == defines.direction.east then
-		result = factory.position.x > player.position.x and math.abs(factory.position.y-player.position.y) < 0.6
-	elseif factory.direction == defines.direction.west then
-		result = factory.position.x < player.position.x and math.abs(factory.position.y-player.position.y) < 0.6
-	end -- should never be a non-cardinal direction
+	if math.abs(factory.position.x-player.position.x) < 0.6 then
+		if factory.position.y < player.position.y then
+			result = "south"
+		else
+			result = "north"
+		end
+	elseif math.abs(factory.position.y-player.position.y) < 0.6 then
+		if factory.position.x < player.position.x then
+			result = "east"
+		else
+			result = "west"
+		end
+	end
 	return result
 end
 
 function get_factory_beneath(player)
 	local entities = player.surface.find_entities_filtered{area = {{player.position.x-0.3, player.position.y-0.3},{player.position.x+0.3, player.position.y+0.3}}}
 	for _, entity in pairs(entities) do
-		if LAYOUT[entity.name] and at_factory_entrance(player, entity) then
-			return entity
+		if LAYOUT[entity.name] then
+			local entrance = get_entrance_beneath(player, entity)
+			if entrance then
+				return entity, entrance
+			end
 		end
 	end
 	return nil
 end
 
 function get_exit_beneath(player)
+	local result = false
 	-- Depends on location of gate!
 	local entities = player.surface.find_entities_filtered{area={{player.position.x-1, player.position.y-1},{player.position.x+1, player.position.y+1}}, name="factory-gate"}
-	return entities[1]
+	if entities[1] then
+		local dir = entities[1].direction
+		if dir == defines.direction.east then
+			if player.position.y > 0 then
+				result = "south" -- factory gate has direction perpendicular to the exit direction
+			else
+				result = "north"
+			end
+		elseif dir == defines.direction.north then
+			if player.position.x > 0 then
+				result = "east"
+			else
+				result = "west"
+			end
+		end
+	end
+	return result
 end
 
 function try_enter_factory(player)
-	local factory = get_factory_beneath(player)
+	local factory, entrance = get_factory_beneath(player)
 	if factory then
 		local new_surface = get_surface(factory)
 		if new_surface and factory_placement_valid(new_surface, factory.surface) then
 			local structure = get_structure(new_surface)
 				if structure.finished then
 					local layout = get_layout(new_surface)
-					local dir = get_direction(new_surface)
 					reset_daytime(new_surface)
-					player.teleport({layout[dir].entrance_x, layout[dir].entrance_y}, new_surface)
+					player.teleport({layout[entrance].entrance_x, layout[entrance].entrance_y}, new_surface)
 					return
 				end
 		end
@@ -501,7 +495,7 @@ end
 function try_leave_factory(player)
 	local exit_building = get_exit_beneath(player)
 	if exit_building then
-		local exit_pos = get_exit(player.surface)
+		local exit_pos = get_exit(player.surface, exit_building)
 		if exit_pos then
 			player.teleport({exit_pos.x, exit_pos.y}, exit_pos.surface)
 			return

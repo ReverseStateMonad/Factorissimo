@@ -1,175 +1,102 @@
-require ("prototypes.copied-from-base.demo-pipecovers")
 require ("prototypes.copied-from-base.circuit-connector-sprites")
 
+local function create_accumulator(name, buffer_capacity, input_flow_limit, output_flow_limit)
+	return {
+		type = "accumulator",
+		name = name,
+		icon = "__base__/graphics/icons/accumulator.png",
+		flags = {"placeable-neutral"},
+		minable = nil,
+		max_health = 150,
+		corpse = "medium-remnants",
+		collision_box = {{-0.9, -0.9}, {0.9, 0.9}},
+		selection_box = {{-1, -1}, {1, 1}},
+		energy_source =
+		{
+			type = "electric",
+			buffer_capacity = buffer_capacity,
+			usage_priority = "terciary",
+			input_flow_limit = input_flow_limit,
+			output_flow_limit = output_flow_limit
+		},
+		picture =
+		{
+			filename = "__base__/graphics/entity/accumulator/accumulator.png",
+			priority = "extra-high",
+			width = 124,
+			height = 103,
+			shift = {0.6875, -0.203125}
+		},
+		charge_animation =
+		{
+			filename = "__base__/graphics/entity/accumulator/accumulator-charge-animation.png",
+			width = 138,
+			height = 135,
+			line_length = 8,
+			frame_count = 24,
+			shift = {0.46875, -0.640625},
+			animation_speed = 0.5
+		},
+		charge_cooldown = 30,
+		charge_light = {intensity = 0.3, size = 0}, --7
+		discharge_animation =
+		{
+			filename = "__base__/graphics/entity/accumulator/accumulator-discharge-animation.png",
+			width = 147,
+			height = 128,
+			line_length = 8,
+			frame_count = 24,
+			shift = {0.390625, -0.53125},
+			animation_speed = 0.5
+		},
+		discharge_cooldown = 60,
+		discharge_light = {intensity = 0.7, size = 0}, --7
+		vehicle_impact_sound =	{ filename = "__base__/sound/car-metal-impact.ogg", volume = 0.65 },
+		working_sound =
+		{
+			sound =
+			{
+				filename = "__base__/sound/accumulator-working.ogg",
+				volume = 1
+			},
+			idle_sound = {
+				filename = "__base__/sound/accumulator-idle.ogg",
+				volume = 0.4
+			},
+			max_sounds_per_type = 5
+		},
+		circuit_wire_connection_point =
+		{
+			shadow =
+			{
+				red = {0.984375, 1.10938},
+				green = {0.890625, 1.10938}
+			},
+			wire =
+			{
+				red = {0.6875, 0.59375},
+				green = {0.6875, 0.71875}
+			}
+		},
+		circuit_connector_sprites = get_circuit_connector_sprites({0.46875, 0.5}, {0.46875, 0.8125}, 26),
+		circuit_wire_max_distance = 7.5,
+		default_output_signal = "signal-A"
+	}
+end
+
 data:extend({
-	-- FACTORY POWER PROVIDER --
-	{
-		type = "accumulator",
-		name = "factory-power-provider",
-		icon = "__base__/graphics/icons/accumulator.png",
-		flags = {"placeable-neutral"},
-		minable = nil,
-		max_health = 150,
-		corpse = "medium-remnants",
-		collision_box = {{-0.9, -0.9}, {0.9, 0.9}},
-		selection_box = {{-1, -1}, {1, 1}},
-		energy_source =
-		{
-			type = "electric",
-			buffer_capacity = factorissimo.config.power_buffer,
-			usage_priority = "terciary",
-			input_flow_limit = "0MW",
-			output_flow_limit = factorissimo.config.power_input_limit
-		},
-		picture =
-		{
-			filename = "__base__/graphics/entity/accumulator/accumulator.png",
-			priority = "extra-high",
-			width = 124,
-			height = 103,
-			shift = {0.6875, -0.203125}
-		},
-		charge_animation =
-		{
-			filename = "__base__/graphics/entity/accumulator/accumulator-charge-animation.png",
-			width = 138,
-			height = 135,
-			line_length = 8,
-			frame_count = 24,
-			shift = {0.46875, -0.640625},
-			animation_speed = 0.5
-		},
-		charge_cooldown = 30,
-		charge_light = {intensity = 0.3, size = 0}, --7
-		discharge_animation =
-		{
-			filename = "__base__/graphics/entity/accumulator/accumulator-discharge-animation.png",
-			width = 147,
-			height = 128,
-			line_length = 8,
-			frame_count = 24,
-			shift = {0.390625, -0.53125},
-			animation_speed = 0.5
-		},
-		discharge_cooldown = 60,
-		discharge_light = {intensity = 0.7, size = 0}, --7
-		vehicle_impact_sound =	{ filename = "__base__/sound/car-metal-impact.ogg", volume = 0.65 },
-		working_sound =
-		{
-			sound =
-			{
-				filename = "__base__/sound/accumulator-working.ogg",
-				volume = 1
-			},
-			idle_sound = {
-				filename = "__base__/sound/accumulator-idle.ogg",
-				volume = 0.4
-			},
-			max_sounds_per_type = 5
-		},
-		circuit_wire_connection_point =
-		{
-			shadow =
-			{
-				red = {0.984375, 1.10938},
-				green = {0.890625, 1.10938}
-			},
-			wire =
-			{
-				red = {0.6875, 0.59375},
-				green = {0.6875, 0.71875}
-			}
-		},
-		circuit_connector_sprites = get_circuit_connector_sprites({0.46875, 0.5}, {0.46875, 0.8125}, 26),
-		circuit_wire_max_distance = 7.5,
-		default_output_signal = "signal-A"
-	},
-	
-	
-	-- FACTORY POWER RECEIVER --
-	{
-		type = "accumulator",
-		name = "factory-power-receiver",
-		icon = "__base__/graphics/icons/accumulator.png",
-		flags = {"placeable-neutral"},
-		minable = nil,
-		max_health = 150,
-		corpse = "medium-remnants",
-		collision_box = {{-0.9, -0.9}, {0.9, 0.9}},
-		selection_box = {{-1, -1}, {1, 1}},
-		energy_source =
-		{
-			type = "electric",
-			buffer_capacity = factorissimo.config.power_buffer,
-			usage_priority = "terciary",
-			input_flow_limit = factorissimo.config.power_output_limit,
-			output_flow_limit = "0MW"
-		},
-		picture =
-		{
-			filename = "__base__/graphics/entity/accumulator/accumulator.png",
-			priority = "extra-high",
-			width = 124,
-			height = 103,
-			shift = {0.6875, -0.203125}
-		},
-		charge_animation =
-		{
-			filename = "__base__/graphics/entity/accumulator/accumulator-charge-animation.png",
-			width = 138,
-			height = 135,
-			line_length = 8,
-			frame_count = 24,
-			shift = {0.46875, -0.640625},
-			animation_speed = 0.5
-		},
-		charge_cooldown = 30,
-		charge_light = {intensity = 0.3, size = 0}, --7
-		discharge_animation =
-		{
-			filename = "__base__/graphics/entity/accumulator/accumulator-discharge-animation.png",
-			width = 147,
-			height = 128,
-			line_length = 8,
-			frame_count = 24,
-			shift = {0.390625, -0.53125},
-			animation_speed = 0.5
-		},
-		discharge_cooldown = 60,
-		discharge_light = {intensity = 0.7, size = 0}, --7
-		vehicle_impact_sound =	{ filename = "__base__/sound/car-metal-impact.ogg", volume = 0.65 },
-		working_sound =
-		{
-			sound =
-			{
-				filename = "__base__/sound/accumulator-working.ogg",
-				volume = 1
-			},
-			idle_sound = {
-				filename = "__base__/sound/accumulator-idle.ogg",
-				volume = 0.4
-			},
-			max_sounds_per_type = 5
-		},
-		circuit_wire_connection_point =
-		{
-			shadow =
-			{
-				red = {0.984375, 1.10938},
-				green = {0.890625, 1.10938}
-			},
-			wire =
-			{
-				red = {0.6875, 0.59375},
-				green = {0.6875, 0.71875}
-			}
-		},
-		circuit_connector_sprites = get_circuit_connector_sprites({0.46875, 0.5}, {0.46875, 0.8125}, 26),
-		circuit_wire_max_distance = 7.5,
-		default_output_signal = "signal-A"
-	},
-	
-	
+	-- FACTORY POWER PROVIDERS --
+	create_accumulator("factory-power-provider", factorissimo.config.small.power_buffer, "0MW", factorissimo.config.small.power_input_limit),
+	create_accumulator("factory-power-provider-mk2", factorissimo.config.medium.power_buffer, "0MW", factorissimo.config.medium.power_input_limit),
+	create_accumulator("factory-power-provider-mk3", factorissimo.config.large.power_buffer, "0MW", factorissimo.config.large.power_input_limit),
+	create_accumulator("factory-power-provider-mk4", factorissimo.config.huge.power_buffer, "0MW", factorissimo.config.huge.power_input_limit),
+
+	-- FACTORY POWER RECEIVERS --
+	create_accumulator("factory-power-receiver", factorissimo.config.small.power_buffer, factorissimo.config.small.power_output_limit, "0MW"),
+	create_accumulator("factory-power-receiver-mk2", factorissimo.config.medium.power_buffer, factorissimo.config.medium.power_output_limit, "0MW"),
+	create_accumulator("factory-power-receiver-mk3", factorissimo.config.large.power_buffer, factorissimo.config.large.power_output_limit, "0MW"),
+	create_accumulator("factory-power-receiver-mk4", factorissimo.config.huge.power_buffer, factorissimo.config.huge.power_output_limit, "0MW"),
+
 	 -- FACTORY POWER DISTRIBUTOR --
 	{
 		type = "electric-pole",

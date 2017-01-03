@@ -1,4 +1,4 @@
-require ("prototypes.copied-from-base.demo-pipecovers")
+require ("prototypes.blank-pipecovers")
 require ("prototypes.copied-from-base.circuit-connector-sprites")
 
 -- Defines
@@ -25,10 +25,15 @@ local function get_connection_points(size)
 	local result = {}
 	local connection_radius = math.floor(size * 2 / 3)
 	local c1 = size + 0.5
-	for c2 = 0.5 - connection_radius, connection_radius - 0.5 do
+	for c2 = 1.5, connection_radius + 0.5 do
 		table.insert(result, { position = { -c1, c2 }, type = "output" })
 		table.insert(result, { position = { c2, -c1 }, type = "output" })
 		table.insert(result, { position = { c1, c2 }, type = "output" })
+		table.insert(result, { position = { c2, c1 }, type = "output" })
+		table.insert(result, { position = { -c1, -c2 }, type = "output" })
+		table.insert(result, { position = { -c2, -c1 }, type = "output" })
+		table.insert(result, { position = { c1, -c2 }, type = "output" })
+		table.insert(result, { position = { -c2, c1 }, type = "output" })
 	end
 	return result
 end
@@ -37,18 +42,19 @@ local function create_building(size, category, image_width, image_height, image_
 	local name = index_size(size) .. "-" .. category
 	local icon = "__Factorissimo__/graphics/icons/" .. name .. ".png"
 	local input, output, priority, usage
+	local cfg = factorissimo.config[index_size(size)]
 	if category == "factory" then
-		input = factorissimo.config.power_input_limit
+		input = cfg.power_input_limit
 		output = "0MW"
 		priority = "secondary-input"
 		usage = input
 	elseif category == "power-plant" then
 		input = "0MW"
-		output = factorissimo.config.power_output_limit
+		output = cfg.power_output_limit
 		priority = "secondary-output"
 		usage = output
 	end
-	local image_prefix = "__Factorissimo__/graphics/entity/" .. name .. "/" .. name
+	local image = "__Factorissimo__/graphics/entity/" .. name .. "/" .. name .. ".png"
 	return {
 		type = "assembling-machine",
 		name = name,
@@ -57,7 +63,7 @@ local function create_building(size, category, image_width, image_height, image_
 		minable = {hardness = 0.2, mining_time = 10, result = name},
 		max_health = 1000 * (size + 2),
 		corpse = "big-remnants",
-		collision_box = {{.05 - size, .05 - size}, {size - .05, size - .6}},
+		collision_box = {{.25 - size, .25 - size}, {size - .25, size - .25}},
 		selection_box = {{-size, -size}, {size, size}},
 		dying_explosion = "medium-explosion",
 		energy_source =
@@ -66,7 +72,7 @@ local function create_building(size, category, image_width, image_height, image_
 			usage_priority = priority,
 			input_flow_limit = input,
 			output_flow_limit = output,
-			buffer_capacity = factorissimo.config.power_buffer,
+			buffer_capacity = cfg.power_buffer,
 			drain = "0W"
 		},
 		energy_usage = usage,
@@ -78,7 +84,7 @@ local function create_building(size, category, image_width, image_height, image_
 				production_type = "output",
 				base_area = 1,
 				base_level = 1,
-				pipe_covers = pipecoverspictures(),
+				pipe_covers = blankpipecoverspictures(),
 				pipe_connections = get_connection_points(size),
 				off_when_no_fluid_recipe = false
 			}
@@ -87,7 +93,7 @@ local function create_building(size, category, image_width, image_height, image_
 		{
 		  north =
 		  {
-			filename = image_prefix .. "-north.png",
+			filename = image,
 			width = image_width,
 			height = image_height,
 			frame_count = 1,
@@ -95,7 +101,7 @@ local function create_building(size, category, image_width, image_height, image_
 		  },
 		  east =
 		  {
-			filename = image_prefix .. "-east.png",
+			filename = image,
 			width = image_width,
 			height = image_height,
 			frame_count = 1,
@@ -103,7 +109,7 @@ local function create_building(size, category, image_width, image_height, image_
 		  },
 		  south =
 		  {
-			filename = image_prefix .. "-south.png",
+			filename = image,
 			width = image_width,
 			height = image_height,
 			frame_count = 1,
@@ -111,7 +117,7 @@ local function create_building(size, category, image_width, image_height, image_
 		  },
 		  west =
 		  {
-			filename = image_prefix .. "-west.png",
+			filename = image,
 			width = image_width,
 			height = image_height,
 			frame_count = 1,
