@@ -20,58 +20,68 @@ local function index_size(size)
 end
 
 -- Constructor functions
-local function make_rectangle(tile, x1, y1, w, h)
-	return { x1 = x1, x2 = x1 + w, y1 = y1, y2 = y1 + h, tile = tile }
-end
+local function construct_tile_map(constructor, radius)
+   local tile_map = {}
+   local function map_tile_rectangle(tile_name, x1, y1, w, h)
+      for x = x1, x1 + w - 1 do
+         tile_map[x] = tile_map[x] or {}
+         for y = y1, y1 + h - 1 do
+            tile_map[x][y] = tile_name
+         end
+      end
+   end
 
-local function floor_size_border(radius)
-	local corner, size = -1 - radius, 2 * radius + 2
-	return make_rectangle("factory-wall", corner, corner, size, size)
-end
+   local function map_floor_border()
+      local size = 2 * radius + 2
+      map_tile_rectangle("factory-wall", 4, 4, size, size)
+   end
 
-local function floor_size(radius)
-	local corner, size = -radius, 2 * radius
-	return make_rectangle("factory-floor", corner, corner, size, size)
-end
+   local function map_floor()
+      local size = 2 * radius
+      map_tile_rectangle("factory-floor", 5, 5, size, size)
+   end
 
-local function device_border_at(x, y)
-	return make_rectangle("factory-wall", x - 2, y - 2, 4, 4)
-end
+   local function map_device_border_at(x, y)
+      map_tile_rectangle("factory-wall", x + radius + 3, y + radius + 3, 4, 4)
+   end
 
-local function entrance_border_at(direction, radius)
-	local result
-	if direction == defines.direction.north then
-		result = make_rectangle("factory-wall", -3, radius, 6, 4)
-	elseif direction == defines.direction.south then
-		result = make_rectangle("factory-wall", -3, -4 - radius, 6, 4)
-	elseif direction == defines.direction.east then
-		result = make_rectangle("factory-wall", radius, -3, 4, 6)
-	elseif direction == defines.direction.west then
-		result = make_rectangle("factory-wall", -4 - radius, -3, 4, 6)
+   local function map_entrance_at(direction)
+      if direction == defines.direction.north then
+         map_tile_rectangle("factory-wall", radius + 2, 2 * radius + 5, 6, 4)
+         map_tile_rectangle("factory-entrance", radius + 3, 2 * radius + 5, 4, 3)
+      elseif direction == defines.direction.south then
+         map_tile_rectangle("factory-wall", radius + 2, 1, 6, 4)
+         map_tile_rectangle("factory-entrance", radius + 3, 2, 4, 3)
+      elseif direction == defines.direction.east then
+         map_tile_rectangle("factory-wall", 2 * radius + 5, radius + 2, 4, 6)
+         map_tile_rectangle("factory-entrance", 2 * radius + 5, radius + 3, 3, 4)
+      elseif direction == defines.direction.west then
+         map_tile_rectangle("factory-wall", 1, radius + 2, 4, 6)
+         map_tile_rectangle("factory-entrance", 2, radius + 3, 3, 4)
+      end
+   end
+
+   local function map_connection_at(x, y)
+      map_tile_rectangle("factory-wall", x - 1, y - 1, 3, 3)
+      map_tile_rectangle("factory-entrance", x, y, 1, 1)
+   end
+   map_floor_border()
+   for c1 = 9, 2 * radius, 9 do
+      map_connection_at(4, c1)
+      map_connection_at(2 * radius + 5, c1)
+      map_connection_at(c1, 4)
+      map_connection_at(c1, 2 * radius + 5)
 	end
-	return result
-end
-
-local function entrance_at(direction, radius)
-	local result
-	if direction == defines.direction.north then
-		result = make_rectangle("factory-entrance", -2, radius, 4, 3)
-	elseif direction == defines.direction.south then
-		result = make_rectangle("factory-entrance", -2, -3 - radius, 4, 3)
-	elseif direction == defines.direction.east then
-		result = make_rectangle("factory-entrance", radius, -2, 3, 4)
-	elseif direction == defines.direction.west then
-		result = make_rectangle("factory-entrance", -3 - radius, -2, 3, 4)
+   map_floor()
+   map_device_border_at(constructor.provider_x, constructor.provider_y)
+   for _, coords in pairs(constructor.distributors) do
+		map_device_border_at(coords.x, coords.y)
 	end
-	return result
-end
-
-local function connection_border_at(x, y)
-	return make_rectangle("factory-wall", math.floor(x) - 1, math.floor(y) - 1, 3, 3)
-end
-
-local function connection_at(x, y)
-	return make_rectangle("factory-entrance", math.floor(x), math.floor(y), 1, 1)
+   map_entrance_at(defines.direction.north)
+   map_entrance_at(defines.direction.south)
+   map_entrance_at(defines.direction.east)
+   map_entrance_at(defines.direction.west)
+   constructor.tile_map = tile_map
 end
 
 local function get_distributors(size)
@@ -121,38 +131,13 @@ end
 local function make_constructor(size)
 	local radius = size * 6
 	local constructor = {
-		rectangles = {},
+		centering_offset = -5 - radius,
 		provider_x = -9,
 		provider_y = radius + 2,
 		distributors = get_distributors(size),
 		gates = make_gates(size)
 	}
-	table.insert(constructor.rectangles, floor_size_border(radius))
-	table.insert(constructor.rectangles, entrance_border_at(defines.direction.north, radius))
-	table.insert(constructor.rectangles, entrance_border_at(defines.direction.south, radius))
-	table.insert(constructor.rectangles, entrance_border_at(defines.direction.east, radius))
-	table.insert(constructor.rectangles, entrance_border_at(defines.direction.west, radius))
-	table.insert(constructor.rectangles, device_border_at(constructor.provider_x, constructor.provider_y))
-	for c1 = 4.5 - radius, radius - 4.5, 9 do
-		table.insert(constructor.rectangles, connection_border_at(-0.5 - radius, c1))
-		table.insert(constructor.rectangles, connection_border_at(radius + 0.5, c1))
-		table.insert(constructor.rectangles, connection_border_at(c1, -0.5 - radius))
-		table.insert(constructor.rectangles, connection_border_at(c1, radius + 0.5))
-	end
-	table.insert(constructor.rectangles, floor_size(radius))
-	for _, coords in pairs(constructor.distributors) do
-		table.insert(constructor.rectangles, device_border_at(coords.x, coords.y))
-	end
-	table.insert(constructor.rectangles, entrance_at(defines.direction.north, radius))
-	table.insert(constructor.rectangles, entrance_at(defines.direction.south, radius))
-	table.insert(constructor.rectangles, entrance_at(defines.direction.east, radius))
-	table.insert(constructor.rectangles, entrance_at(defines.direction.west, radius))
-	for c1 = 4.5 - radius, radius - 4.5, 9 do
-		table.insert(constructor.rectangles, connection_at(-0.5 - radius, c1))
-		table.insert(constructor.rectangles, connection_at(radius + 0.5, c1))
-		table.insert(constructor.rectangles, connection_at(c1, -0.5 - radius))
-		table.insert(constructor.rectangles, connection_at(c1, radius + 0.5))
-	end
+   construct_tile_map(constructor, radius)
 	return constructor
 end
 

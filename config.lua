@@ -11,7 +11,7 @@ factorissimo.config.small = {
 	power_input_limit = "10MW",
 
 -- How much power can leave a power plant
-	power_output_limit = "100MW"
+	power_output_limit = "97MW"
 }
 
 -- Tier 1 (medium) factories
@@ -21,10 +21,10 @@ factorissimo.config.medium = {
 	power_buffer = "10MJ",
 
 -- How much power can enter a factory
-	power_input_limit = "50MW",
+	power_input_limit = "48MW",
 
 -- How much power can leave a power plant
-	power_output_limit = "500MW"
+	power_output_limit = "484MW"
 }
 
 -- Tier 2 (large) factories
@@ -34,10 +34,10 @@ factorissimo.config.large = {
 	power_buffer = "50MJ",
 
 -- How much power can enter a factory
-	power_input_limit = "250MW",
+	power_input_limit = "242MW",
 
 -- How much power can leave a power plant
-	power_output_limit = "2500MW"
+	power_output_limit = "2420MW"
 }
 
 -- Tier 3 (huge) factories
@@ -46,11 +46,11 @@ factorissimo.config.huge = {
 -- Note: If this value is set too small relative to the power limits, then this will lower the effective power limits.
 	power_buffer = "250MJ",
 
--- How much power can enter a factory
-	power_input_limit = "1250MW",
+-- How much power can enter a factory.  Great Scott!
+	power_input_limit = "1210MW",
 
 -- How much power can leave a power plant
-	power_output_limit = "12500MW"
+	power_output_limit = "12100MW"
 }
 
 -- How much of the power sent into a factory arrives inside
@@ -81,7 +81,7 @@ factorissimo.config.pollution_multiplier = 1.0
 -- 3 means you can place any building inside any other!
 -- Note: Changing this config will not prevent you from *placing* factories anywhere. However if you place factories where they are not supposed to be, they will simply not work and not connect to anything, and you won't be able to enter them.
 -- Another note: Changing this config mid-game will not disconnect preexisting wrongly nested factories, but it will prevent you from entering them. To be able to enter such interior factories again, just mine them and place them back down in the overworld.
-factorissimo.config.recursion = 3
+factorissimo.config.recursion = 1
 
 -- Maximum factory size
 -- 0: Small (6X6) only

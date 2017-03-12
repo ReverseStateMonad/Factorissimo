@@ -6,13 +6,19 @@ require("updates")
 require("connections")
 
 -- GLOBALS --
+local function guarantee_global_table(subtable)
+   global[subtable] = global[subtable] or {}
+end
 
-function glob_init()
-	global["factory-surface"] = global["factory-surface"] or {}
-	global["surface-structure"] = global["surface-structure"] or {}
-	global["surface-layout"] = global["surface-layout"] or {}
-	global["surface-exit"] = global["surface-exit"] or {}
-	global["health-data"] = global["health-data"] or {}
+local function glob_init()
+   guarantee_global_table("dirty-connections")
+	guarantee_global_table("factory-surface")
+	guarantee_global_table("surface-structure")
+   guarantee_global_table("surface-construction-queue")
+	guarantee_global_table("surface-layout")
+	guarantee_global_table("surface-exit")
+	guarantee_global_table("health-data")
+   guarantee_global_table("exit-check")
 	init_connection_structure()
 end
 
@@ -32,85 +38,34 @@ local DEBUG = false
 
 local LAYOUT = require("layouts")
 
--- FACTORY WORLD ASSIGNMENT --
-
-function create_surface(factory, layout)
-	local surface_name = "Inside factory " .. factory.unit_number
-	local surface = game.create_surface(surface_name, {width = 64*layout.chunk_radius-62, height = 64*layout.chunk_radius-62})
-	surface.request_to_generate_chunks({0, 0}, layout.chunk_radius)
-	global["factory-surface"][factory.unit_number] = surface -- surface_name
-	global["surface-structure"][surface_name] = {parent = factory, ticks = 0, connections = {}, chunks_generated = 0, chunks_required = 4*layout.chunk_radius*layout.chunk_radius, finished = false}
-	global["surface-layout"][surface_name] = layout.name
-	global["surface-exit"][surface_name] = {
-		north = {x = factory.position.x + layout.north.exit_x, y = factory.position.y + layout.north.exit_y, surface = factory.surface},
-		south = {x = factory.position.x + layout.south.exit_x, y = factory.position.y + layout.south.exit_y, surface = factory.surface},
-		east = {x = factory.position.x + layout.east.exit_x, y = factory.position.y + layout.east.exit_y, surface = factory.surface},
-		west = {x = factory.position.x + layout.west.exit_x, y = factory.position.y + layout.west.exit_y, surface = factory.surface}
-	}
-	reset_daytime(surface)
-end
-
-function connect_factory_to_existing_surface(factory, surface)
-	global["factory-surface"][factory.unit_number] = surface
-	global["surface-structure"][surface.name].parent = factory
-	local layout = get_layout(surface)
-	global["surface-exit"][surface.name] = {
-		north = {x = factory.position.x + layout.north.exit_x, y = factory.position.y + layout.north.exit_y, surface = factory.surface},
-		south = {x = factory.position.x + layout.south.exit_x, y = factory.position.y + layout.south.exit_y, surface = factory.surface},
-		east = {x = factory.position.x + layout.east.exit_x, y = factory.position.y + layout.east.exit_y, surface = factory.surface},
-		west = {x = factory.position.x + layout.west.exit_x, y = factory.position.y + layout.west.exit_y, surface = factory.surface}
-	}
-end
-
-function has_surface(factory)
-	return global["factory-surface"][factory.unit_number] ~= nil
-end
-
-function get_surface(factory)
+-- FACTORY DATA GET/SET FUNCTIONS
+local function get_surface(factory)
 	return global["factory-surface"][factory.unit_number]
 end
 
-function is_factory(surface)
-	return global["surface-structure"][surface.name] ~= nil
-end
-
-function get_structure(surface)
+local function get_structure(surface)
 	return global["surface-structure"][surface.name]
 end
 
-function set_structure(surface, structure_id, entity)
+local function set_structure(surface, structure_id, entity)
 	global["surface-structure"][surface.name][structure_id] = entity
 end
 
-function get_all_structures()
-	return global["surface-structure"]
-end
-
-function get_layout(surface)
-	if global["surface-layout"][surface.name] then
-		return LAYOUT[global["surface-layout"][surface.name]] 
+local function get_layout_by_name(surface_name)
+   local layout_name = global["surface-layout"][surface_name]
+	if layout_name then
+		return LAYOUT[layout_name]
 	else
 		return nil
 	end
 end
 
-function get_layout_by_name(surface_name)
-	if global["surface-layout"][surface_name] then
-		return LAYOUT[global["surface-layout"][surface_name]]
-	else
-		return nil
-	end
+local function get_layout(surface)
+	return get_layout_by_name(surface.name)
 end
 
-function get_exit(surface, direction)
-	return global["surface-exit"][surface.name][direction]
-end
-
-function save_health_data(factory)
-	i = 1
-	while global["health-data"][i] do
-	i = i + 1
-	end
+local function save_health_data(factory)
+	local i = #global["health-data"] + 1
 	if i > factory.prototype.max_health-1 then
 		for _, player in pairs(game.players) do
 			player.print("You have picked up too many factories at once. Tell the dev about this, he'll be impressed and slightly worried.")
@@ -128,127 +83,183 @@ function save_health_data(factory)
 			energy = factory.energy,
 		}
 		factory.health = i
-		dbg("Saved factory to health value " .. i)
 	end
 end
 
-function get_and_delete_health_data(health)
+local function get_and_delete_health_data(health)
 	local health_int = math.floor(health+0.5)
 	local data = global["health-data"][health_int]
 	global["health-data"][health_int] = nil
 	return data
 end
 
+local function mark_connections_dirty(factory)
+	local surface = get_surface(factory)
+	if surface then
+      global["dirty-connections"][surface.name] = true
+   end
+end
+
 -- FACTORY INTERIOR GENERATION --
 
 -- Daytime values: 0 is eternal night, 1 is regular, 2 is eternal day
-function reset_daytime(surface)
+local function reset_daytime(surface)
 	local daytime = 0
 	local layout = get_layout(surface)
-	if not layout then return end
-	if layout.is_power_plant then
-		daytime = factorissimo.config.power_plant_daytime
-	else
-		daytime = factorissimo.config.factory_daytime
-	end
-	if daytime == 2 then
-		surface.daytime = 0 -- Midday
-		surface.freeze_daytime(true)
-	elseif daytime == 0 then
-		surface.daytime = 0.5 -- Midnight
-		surface.freeze_daytime(true)
-	else
-		surface.daytime = game.surfaces["nauvis"].daytime
-		surface.freeze_daytime(false)
-	end
+	if layout then
+      if layout.is_power_plant then
+         daytime = factorissimo.config.power_plant_daytime
+      else
+         daytime = factorissimo.config.factory_daytime
+      end
+      if daytime == 1 then
+         surface.daytime = game.surfaces["nauvis"].daytime
+         surface.freeze_daytime(false)
+      else
+         if daytime == 0 then
+            surface.daytime = 0.5 -- Midnight
+         else
+            surface.daytime = 0 -- Midday
+         end
+         surface.freeze_daytime(true)
+      end
+   end
 end
 
-function delete_entities(surface)
+local function delete_entities(surface)
 	for _, entity in pairs(surface.find_entities({{-1000, -1000},{1000, 1000}})) do
 		entity.destroy()
 	end
 end
 
-function add_tile_rect(tiles, tile_name, xmin, ymin, xmax, ymax) -- tiles is rw
-	local i = #tiles
-	for x = xmin, xmax-1 do
-		for y = ymin, ymax-1 do
-			i = i + 1
-			tiles[i] = {name = tile_name, position={x, y}}
-		end
-	end
-end
-
-function place_entity(surface, entity_name, x, y, force, direction)
-	entity = surface.create_entity{name = entity_name, position = {x, y}, force = force, direction = direction}
+local function place_entity(surface, data, structure_id)
+   local entity = surface.create_entity(data)
 	if entity then
 		entity.minable = false
 		entity.rotatable = false
 		entity.destructible = false
-	end
-	return entity
-end
-
-
--- TODO merge with place_entity?
-function place_entity_generated(surface, entity_name, x, y, structure_id)
-	entity = surface.create_entity{name = entity_name, position = {x, y}, force = get_structure(surface).parent.force}
-	if entity then
-		entity.minable = false
-		entity.rotatable = false
-		entity.destructible = false
-		if structure_id and entity then
-			dbg("Placed and registered " .. structure_id)
+		if structure_id then
 			set_structure(surface, structure_id, entity)
 		end
 	end
 end
 
-function build_factory_interior(surface, layout, structure)
+local function process_tile_map(tile_map, surface, x_offset, y_offset)
+   local data, count = {}, 0
+   for x, col in pairs(tile_map) do
+      local x_final = x + x_offset
+      for y, tile_name in pairs(col) do
+         count = count + 1
+         data[count] = { name = tile_name, position = { x_final, y + y_offset } }
+      end
+   end
+   surface.set_tiles(data)
+end
+
+local function build_factory_interior(surface_name)
+   local structure = global["surface-structure"][surface_name]
+   local factory = structure.parent
+   local surface = get_surface(factory)
+   local layout = get_layout_by_name(surface_name)
+   local constructor = layout.constructor
 	delete_entities(surface)
-	tiles = {}
-	for _, rect in pairs(layout.constructor.rectangles) do
-		add_tile_rect(tiles, rect.tile, rect.x1, rect.y1, rect.x2, rect.y2)
+   local centering_offset = constructor.centering_offset
+
+	process_tile_map(constructor.tile_map, surface, centering_offset, centering_offset)
+   local parent_force = factory.force
+   place_entity(surface, { name = layout.provider, position = { constructor.provider_x, constructor.provider_y }, force = parent_force }, "power_provider")
+	for _, coords in ipairs(constructor.distributors) do
+      place_entity(surface, { name = "factory-power-distributor", position = { coords.x, coords.y }, force = parent_force })
 	end
-	surface.set_tiles(tiles)
-	place_entity_generated(surface, layout.provider, layout.constructor.provider_x, layout.constructor.provider_y, "power_provider")
-	for _, coords in pairs(layout.constructor.distributors) do
-		place_entity_generated(surface, "factory-power-distributor", coords.x, coords.y)
+	for _, coords in ipairs(constructor.gates) do
+		place_entity(surface, { name = "factory-gate", position = { coords.x, coords.y }, force = parent_force, direction = coords.dir })
 	end
-	for _, coords in pairs(layout.constructor.gates) do
-		place_entity(surface, "factory-gate", coords.x, coords.y, structure.parent.force, coords.dir)
-	end
-	structure.finished = true
+   global["surface-construction-queue"][surface_name] = nil
 end
 
 script.on_event(defines.events.on_chunk_generated, function(event)
-	if is_factory(event.surface) then
-		local structure = get_structure(event.surface)
-		structure.chunks_generated = structure.chunks_generated + 1 -- Wait until all chunks are generated and then some, to avoid other mods' worldgen interfering
-	end
+   local queue = global["surface-construction-queue"]
+   local surface_name = event.surface.name
+   local chunks_remaining = queue[surface_name]
+   if chunks_remaining then
+      queue[surface_name] = chunks_remaining - 1
+   end
 end)
 
+-- FACTORY WORLD ASSIGNMENT --
+local function get_exit_offsets(factory, layout)
+   local f_pos, surface = factory.position, factory.surface
+   local fx, fy = f_pos.x, f_pos.y
+   return {
+		north = {x = fx + layout.north.exit_x, y = fy + layout.north.exit_y, surface = surface},
+		south = {x = fx + layout.south.exit_x, y = fy + layout.south.exit_y, surface = surface},
+		east = {x = fx + layout.east.exit_x, y = fy + layout.east.exit_y, surface = surface},
+		west = {x = fx + layout.west.exit_x, y = fy + layout.west.exit_y, surface = surface}
+	}
+end
+
+local function create_surface(factory, layout)
+	local surface_name = "Inside factory " .. factory.unit_number
+	local surface = game.create_surface(surface_name, { width = 64 * layout.chunk_radius - 62, height = 64 * layout.chunk_radius - 62 })
+	surface.request_to_generate_chunks({0, 0}, layout.chunk_radius)
+	global["factory-surface"][factory.unit_number] = surface -- surface_name
+	global["surface-structure"][surface_name] = { parent = factory, connections = {} }
+   global["surface-construction-queue"][surface_name] = 4 * layout.chunk_radius * layout.chunk_radius
+	global["surface-layout"][surface_name] = layout.name
+	global["surface-exit"][surface_name] = get_exit_offsets(factory, layout)
+	reset_daytime(surface)
+end
+
+local function connect_factory_to_existing_surface(factory, surface)
+   local surface_name = surface.name
+	global["factory-surface"][factory.unit_number] = surface
+	global["surface-structure"][surface_name].parent = factory
+	local layout = get_layout(surface)
+	global["surface-exit"][surface_name] = get_exit_offsets(factory, layout)
+   connect_surface(surface_name)
+end
 
 -- PLACING, PICKING UP FACTORIES
 
-function on_built_factory(factory)
-	factory.operable = false
-	health_data = get_and_delete_health_data(factory.health)
-	if health_data then
-		connect_factory_to_existing_surface(factory, health_data.surface)
-		for k, v in pairs(health_data) do
-			if k ~= "surface" then
-				factory[k] = v
-			end
-		end
-		mark_connections_dirty(factory)
+-- RECURSION
 
-	elseif not has_surface(factory) then -- Should always be the case, but just in case
-		dbg("Generating new factory interior")
-		local layout = LAYOUT[factory.name]
-		create_surface(factory, layout)
-		factory.energy = 0
+local function factory_placement_valid(inner_surface, outer_surface)
+	if get_structure(inner_surface) and get_structure(outer_surface) then
+      if factorissimo.config.recursion == 0 then
+         return false
+      elseif factorissimo.config.recursion < 3 then
+         local inner_tier = get_layout(inner_surface).tier or 0
+         local outer_tier = get_layout(outer_surface).tier or 0
+         if factorissimo.config.recursion == 1 then return inner_tier < outer_tier end
+         return inner_tier <= outer_tier
+      end
 	end
+	return true
+end
+
+local function on_built_factory(factory)
+	factory.operable = false
+	local health_data = get_and_delete_health_data(factory.health)
+   local inner_surface
+	if health_data then
+      inner_surface = health_data.surface
+      health_data.surface = nil
+		connect_factory_to_existing_surface(factory, inner_surface)
+		for k, v in pairs(health_data) do
+			factory[k] = v
+		end
+	else
+      inner_surface = get_surface(factory)
+      if not inner_surface then -- Should always be the case, but just in case
+         local layout = LAYOUT[factory.name]
+         create_surface(factory, layout)
+         factory.energy = 0
+         inner_surface = get_surface(factory)
+      end
+	end
+   local outer_surface = factory.surface
+   local structure = get_structure(inner_surface)
+   structure.valid_placement = factory_placement_valid(inner_surface, outer_surface)
 end
 
  -- Workaround to not really being able to store information in a deconstructed entity:
@@ -260,8 +271,7 @@ end
  -- However things may break a little if some other mod has the bright idea of changing health values of my items,
  -- or aborting factory deconstruction, or, well, you get the point.
 
-
-function on_picked_up_factory(factory)
+local function on_picked_up_factory(factory)
 	save_health_data(factory)
 	local structure = get_structure(get_surface(factory))
 	for _, data in pairs(structure.connections) do
@@ -275,12 +285,16 @@ script.on_event({defines.events.on_built_entity, defines.events.on_robot_built_e
 	if LAYOUT[entity.name] then -- entity is factory
 		on_built_factory(entity)
 	else
-		-- Entity needs to update factory connections
-		local entities = entity.surface.find_entities_filtered{area = {{entity.position.x-5, entity.position.y-5},{entity.position.x+5, entity.position.y+5}}} -- Generous search radius, maybe too generous
-		for _, entity2 in pairs(entities) do
-			if has_surface(entity2) then
-				-- entity2 is factory
-				mark_connections_dirty(entity2)
+		local radius = entity_type_connection_radius(entity.type)
+		if radius then
+			-- Entity may need to update factory connections
+			local x, y = entity.position.x, entity.position.y
+			local entities = entity.surface.find_entities_filtered{ area = {{x - radius, y - radius},{x + radius, y + radius}}, type = "assembling-machine" }
+			for _, entity2 in pairs(entities) do
+				if get_surface(entity2) then
+					-- entity2 is factory
+					mark_connections_dirty(entity2)
+				end
 			end
 		end
 	end
@@ -304,204 +318,115 @@ script.on_event({defines.events.on_entity_died}, function(event)
 	end
 end)
 
-
 -- FACTORY MECHANICS
 
-function balance_power(from, to, multiplier)
-	local max_transfer_energy = math.min(from.energy, to.electric_buffer_size - to.energy)
-	from.energy = from.energy - max_transfer_energy
-	to.energy = to.energy + max_transfer_energy * multiplier
-end
+-- ENTERING/LEAVING FACTORIES
 
-function mark_connections_dirty(factory)
-	local surface = get_surface(factory)
-	if not surface then return end
-	local structure = get_structure(surface)
-	if not structure then return end
-	structure.connections_dirty = true
-end
-
-local function check_connections(factory, surface, structure, layout, parent_surface)
-	for id, pconn in pairs(layout.possible_connections) do
-		data = structure.connections[id]
-		
-		if data then
-			if not update_connection(data) then
-				destroy_connection(data)
-			end
-			if not data.__valid then
-				data = nil
-				structure.connections[id] = nil
-			end
-		end
-		if data == nil and factory_placement_valid(surface, parent_surface) then
-			local fx = structure.parent.position.x
-			local fy = structure.parent.position.y
-			structure.connections[id] = test_for_connection(parent_surface, factory, surface, pconn, fx, fy)
+local function get_entrance_at(surface, px, py, pn)
+	local transfer_to = nil
+   local entities = surface.find_entities_filtered{ area = { { px - 0.3, py - 0.3 }, { px + 0.3, py + 0.3 } }, type = "assembling-machine" }
+   for _, entity in pairs(entities) do
+      local layout = LAYOUT[entity.name]
+		if layout then
+         local fpos = entity.position
+         local fx, fy = fpos.x, fpos.y
+         local entrance = false
+         if math.abs(fx - px) < 0.6 then
+            if fy < py then
+               entrance = "south"
+            else
+               entrance = "north"
+            end
+         elseif math.abs(fy - py) < 0.6 then
+            if fx < px then
+               entrance = "east"
+            else
+               entrance = "west"
+            end
+         end
+         if entrance then
+            local new_surface = get_surface(entity)
+            local surface_name = new_surface.name
+            if global["exit-check"][pn] ~= surface_name then
+               local structure = get_structure(new_surface)
+               if structure.valid_placement and not global["surface-construction-queue"][surface_name] then
+                  reset_daytime(new_surface)
+                  transfer_to = { x = layout[entrance].entrance_x, y = layout[entrance].entrance_y, surface = new_surface }
+                  break
+               end
+            end
+         end
 		end
 	end
+   global["exit-check"][pn] = nil
+	return transfer_to
 end
+
+local function get_exit_at(surface, px, py, pn)
+	local transfer_to = nil
+	-- Depends on location/orientation of gates
+	local entities = surface.find_entities_filtered{ area = { { px - 1, py - 1 }, { px + 1, py + 1 } }, name = "factory-gate" }
+	if entities[1] then
+		local dir = entities[1].direction
+		if dir == defines.direction.east then
+			if py > 0 then
+				dir = "south" -- factory gate has direction perpendicular to the exit direction
+			else
+				dir = "north"
+			end
+		elseif dir == defines.direction.north then
+			if px > 0 then
+				dir = "east"
+			else
+				dir = "west"
+			end
+		end
+      local surface_name = surface.name
+      transfer_to = global["surface-exit"][surface_name][dir]
+      if transfer_to then
+         global["exit-check"][pn] = surface_name
+      end
+	end
+	return transfer_to
+end
+
+local function attempt_player_transfer(player)
+   if player.connected and player.character and player.vehicle == nil then
+      local surface, position, id_num = player.surface, player.position, player.character.unit_number
+      local x, y = position.x, position.y
+
+      local destination = get_entrance_at(surface, x, y, id_num) or get_exit_at(surface, x, y, id_num)
+
+      if destination then
+         player.teleport({destination.x, destination.y}, destination.surface)
+      end
+   end
+end
+
+-- register factory management in on tick event
 
 script.on_event(defines.events.on_tick, function(event)
 	-- PLAYER TRANSFER
 	for _, player in pairs(game.players) do
-		if player.connected and player.character and player.vehicle == nil then
-			try_enter_factory(player)
-			try_leave_factory(player)
-		end
+      attempt_player_transfer(player)
 	end
 	
 	-- CONNECTIONS
-	update_pending_connections()
-
-	-- BASE FACTORY MECHANICS
-	for surface_name, structure in pairs(get_all_structures()) do
-		if structure.parent and structure.parent.valid and structure.finished then -- Don't do anything before the interior has finished generating
-		
-			structure.ticks = (structure.ticks or 0) + 1
-		
-			local surface = get_surface(structure.parent) --game.surfaces[surface_name]
-			local parent_surface = structure.parent.surface
-			local layout = get_layout(surface)
-			
-			-- TRANSFER POWER
-			if structure.power_provider and structure.power_provider.valid then
-				if layout.is_power_plant then
-					balance_power(structure.power_provider, structure.parent, factorissimo.config.power_output_multiplier)
-				else
-					balance_power(structure.parent, structure.power_provider, factorissimo.config.power_input_multiplier)
-				end
-			end
-			
-			-- TRANSFER POLLUTION
-			if structure.ticks % 60 < 1 then
-				local exit_pos = get_exit(surface, "south") 
-				for y = -1,1,2 do
-					for x = -1,1,2 do
-						local pollution = surface.get_pollution({x, y})
-						surface.pollute({x, y}, -pollution/2)
-						parent_surface.pollute({exit_pos.x, exit_pos.y}, (pollution/2) * factorissimo.config.pollution_multiplier)
-					end
-				end
-			end
-			
-			-- CHECK FOR NEW CONNECTIONS
-			if structure.connections_dirty then
-				structure.connections_dirty = false
-				check_connections(structure.parent, surface, structure, layout, parent_surface)
-			end
-		elseif structure.parent and structure.parent.valid and structure.chunks_generated == structure.chunks_required then
-			-- We need to wait until the factory interior surface is generated with default worldgen, then replace it with our own interior
-			local surface = get_surface(structure.parent)
-			dbg(surface.name)
-			dbg(tostring(global["surface-layout"][surface.name]))
-			local layout = get_layout(surface)
-			build_factory_interior(surface, layout, structure)
-			-- This can theoretically be called repeatedly each tick until the factory is marked finished
-			if structure.finished then
-				-- Check connections once the factory is finished
-				mark_connections_dirty(structure.parent)
-			end
-		end
+	update_pending_connections() -- this now includes pollution + energy transfer
+   for surface_name, _ in pairs(global["dirty-connections"]) do
+      if not global["surface-construction-queue"][surface_name] then -- Don't check connections before construction of interior is finished
+         check_connections(surface_name) -- Check for updated connections
+      end
 	end
+
+	-- FACTORY CONSTRUCTION
+   for surface_name, chunks_remaining in pairs(global["surface-construction-queue"]) do
+      if chunks_remaining <= 0 then
+         build_factory_interior(surface_name)
+         connect_surface(surface_name) -- Connect surface and check connections once the factory is finished
+      end
+   end
 end)
-
--- RECURSION
-
-function factory_placement_valid(inner_surface, outer_surface)
-	if is_factory(inner_surface) and is_factory(outer_surface) then
-		local inner_tier = get_layout(inner_surface).tier or 0
-		local outer_tier = get_layout(outer_surface).tier or 0
-		if factorissimo.config.recursion == 0 then return false end
-		if factorissimo.config.recursion == 1 then return inner_tier < outer_tier end
-		if factorissimo.config.recursion == 2 then return inner_tier <= outer_tier end
-		return true
-	end
-	return true
-end
-
--- ENTERING/LEAVING FACTORIES
-
-function get_entrance_beneath(player, factory)
-	local result = false
-	if math.abs(factory.position.x-player.position.x) < 0.6 then
-		if factory.position.y < player.position.y then
-			result = "south"
-		else
-			result = "north"
-		end
-	elseif math.abs(factory.position.y-player.position.y) < 0.6 then
-		if factory.position.x < player.position.x then
-			result = "east"
-		else
-			result = "west"
-		end
-	end
-	return result
-end
-
-function get_factory_beneath(player)
-	local entities = player.surface.find_entities_filtered{area = {{player.position.x-0.3, player.position.y-0.3},{player.position.x+0.3, player.position.y+0.3}}}
-	for _, entity in pairs(entities) do
-		if LAYOUT[entity.name] then
-			local entrance = get_entrance_beneath(player, entity)
-			if entrance then
-				return entity, entrance
-			end
-		end
-	end
-	return nil
-end
-
-function get_exit_beneath(player)
-	local result = false
-	-- Depends on location of gate!
-	local entities = player.surface.find_entities_filtered{area={{player.position.x-1, player.position.y-1},{player.position.x+1, player.position.y+1}}, name="factory-gate"}
-	if entities[1] then
-		local dir = entities[1].direction
-		if dir == defines.direction.east then
-			if player.position.y > 0 then
-				result = "south" -- factory gate has direction perpendicular to the exit direction
-			else
-				result = "north"
-			end
-		elseif dir == defines.direction.north then
-			if player.position.x > 0 then
-				result = "east"
-			else
-				result = "west"
-			end
-		end
-	end
-	return result
-end
-
-function try_enter_factory(player)
-	local factory, entrance = get_factory_beneath(player)
-	if factory then
-		local new_surface = get_surface(factory)
-		if new_surface and factory_placement_valid(new_surface, factory.surface) then
-			local structure = get_structure(new_surface)
-				if structure.finished then
-					local layout = get_layout(new_surface)
-					reset_daytime(new_surface)
-					player.teleport({layout[entrance].entrance_x, layout[entrance].entrance_y}, new_surface)
-					return
-				end
-		end
-	end
-end
-
-function try_leave_factory(player)
-	local exit_building = get_exit_beneath(player)
-	if exit_building then
-		local exit_pos = get_exit(player.surface, exit_building)
-		if exit_pos then
-			player.teleport({exit_pos.x, exit_pos.y}, exit_pos.surface)
-			return
-		end
-	end
-end
 
 -- DEBUGGING
 
